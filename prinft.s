@@ -1,7 +1,6 @@
 
 section .data
-
-test_string: db "check0: %1, check1: %b, check2: %c, check3: %d, check4: %o, check5: %s, check6: %x, and I %s %x %d%%%c%b\n", 0xa, 0xa, 0xa, 0x00
+test_string: db "ahahah, %d %d %d %d %d %d %s %b", 0x00
 msg_test:    db "stavim na zero", 0X00
 string1:     db "LOVE", 0x00
 ;__________________________________
@@ -11,9 +10,6 @@ PROCENT_SYMB     equ '%'
 END_STRING_VALUE equ 0X00
 STDOUT_DESCR	 equ 1
 alphabet: db "0123456789abcdefghi"
-ASCII_a equ 0x61
-ASCII_z equ 'z'
-ASCII_max equ 256
 
 SYSCALL_EXIT equ 0x3c
 SYSCALL_OUTPUT equ 0x01
@@ -26,20 +22,15 @@ section .text
 global prinft
 ;global _start
 ;_start:
-;	push 15
-;	push 33
-;	push 100
-;	push 3802
-;	push string1 	
-;	push 16 * 4
+;	mov rdi, test_string
+;	mov rsi, 0x01
+;	mov rdx, 0x02
+;	mov rcx, 0x03
+;	mov r8,  0x04
+;	mov r9,  0x05
+;	push 0x10
 ;	push msg_test
-;	push 8*4
-;	push 777
-;	push 't'
-;	push 16
-;	push 777
-;	push test_string
-;
+;;	push 0x10
 ;	call prinft
 ;
 ;	add rsp, 8*7 + 5*8
@@ -59,55 +50,94 @@ global prinft
 prinft:
 	push rbp
 	mov rbp, rsp
+	
+	sub rsp, 0x30
+	mov r10, rdi
+	mov qword [rbp - 0x10], rsi
+	mov qword [rbp - 0x18], rdx
+	mov qword [rbp - 0x20], rcx
+	mov qword [rbp - 0x28], r8
+	mov qword [rbp - 0x30], r9
 
-	mov rsi, rdi
-	mov qword [rbp - 0x8], rsi
+	mov rsi, r10
 	mov rdi, temp_string					; указатель на строку, в которую мы будем ложить все данные
 	
 	xor rcx, rcx							; args_readen = 0
-string_converting:
-
-	cmp byte [rsi], PROCENT_SYMB
-	je spec_handler
-	movsb
+string_conv_ph1:
+	cmp rcx, 0x05
+	je string_conv_ph2
 
 	cmp byte [rsi], END_STRING_VALUE
-	jne string_converting
+	je after_converting
 
-	jmp after_converting
-spec_handler:
+	cmp byte [rsi], PROCENT_SYMB
+	je spec_handler1
+	movsb
+	
+	jmp string_conv_ph1
+
+spec_handler1:
 	inc rsi
 	cmp byte [rsi], PROCENT_SYMB
-	jne not_percent_spec
+	jne not_percent_spec1
 	mov byte [rdi], PROCENT_SYMB
 	inc rsi
 	inc rdi
-	jmp string_converting
-not_percent_spec:
+	jmp string_conv_ph1
+not_percent_spec1:
+	
+	mov rax, rcx
+	shl rax, 3
+	add rax, 0x10
+	mov rdx, rbp
+	sub rdx, rax
+
+	mov rax, [rdx]
+
+	xor rdx, rdx
+	mov dl, byte [rsi]						; dl = ascii of symb after %
+	shl rdx, 3
+
+	call [rdx+jump_table]			; вызываем обработку спецификатора по свичу
+	
+	inc rsi
+	inc rcx									; args_readen++
+	
+	jmp string_conv_ph1
+string_conv_ph2:
+
+	cmp byte [rsi], END_STRING_VALUE
+	je after_converting
+
+	cmp byte [rsi], PROCENT_SYMB
+	je spec_handler2
+	movsb
+	
+	jmp string_conv_ph2
+
+spec_handler2:
+	inc rsi
+	cmp byte [rsi], PROCENT_SYMB
+	jne not_percent_spec2
+	mov byte [rdi], PROCENT_SYMB
+	inc rsi
+	inc rdi
+	jmp string_conv_ph2
+not_percent_spec2:
 		
 	xor rdx, rdx
 	mov dl, byte [rsi]						; dl = ascii of symb after %
-	push rdi					    		; saving rdi
-
-	mov rdi, spec_conver_alphabet			; нужно преобразовать букву в отступ для свича
-	add rdi, rdx
+	shl rdx, 3
 	
-	mov dl, byte [rdi]						; dl = offset для свича
+	mov rax, [rbp + rcx * 0x08 - 0x28 + 0x10]				; rax = arg_value
 	
-	;mov rdi, rcx					
-	;shl rdi, 3
-	;add rdi, 32
-	;add rdi, rbp
-	mov rax, 1				; rax = arg_value
-	pop rdi
-	
-	call [specif_cases + 8 * rdx]			; вызываем обработку спецификатора по свичу
+	call [rdx + jump_table]			; вызываем обработку спецификатора по свичу
 	
 	inc rsi
 	inc rcx									; args_readen++
 	
 	cmp byte [rsi], END_STRING_VALUE
-	jne string_converting
+	jne string_conv_ph2
 
 after_converting:
 	push temp_string
@@ -119,6 +149,8 @@ after_converting:
 	mov rsi, temp_string
 	syscall									; print(temp_string)
 	mov rax, 0x01
+
+	add rsp, 0x30
 	pop rbp	
 	ret
 ;===============================================================
@@ -185,45 +217,27 @@ int16_spec:
 ;__________________________________
 section .rodata
 
-specif_cases:
-	dq default_spec
-	dq int2_spec
-	dq int16_spec
-	dq char_spec
-	dq int10_spec
-	dq int8_spec
-	dq string_spec
+;specif_cases:
+;	dq default_spec
+;	dq int2_spec
+;	dq int16_spec
+;	dq char_spec
+;	dq int10_spec
+;	dq int8_spec
+;	dq string_spec
 
-; таблица преобразования ascii ---> офсет для свича
-spec_conver_alphabet: 
-		times ASCII_a db 0x00
-		      db 0x00 ;a
-		      db 0x01 ;b
-	              db 0x02 ;c
-	              db 0x03 ;d
-                      db 0x00 ;e
-	              db 0x00 ;f
-	              db 0x00 ;g
-	              db 0x00 ;h
-	              db 0x00 ;i
-	              db 0x00 ;j
-	              db 0x00 ;k
-	              db 0x00 ;l
-	              db 0x00 ;m
-	              db 0x00 ;n
-	              db 0x04 ;o
-	              db 0x00 ;p
-	              db 0x00 ;q
-	              db 0x00 ;r
-	              db 0x05 ;s
-	              db 0x00 ;t
-	              db 0x00 ;u
-	              db 0x00 ;v
-	              db 0x00 ;w
-	              db 0x06 ;x
-	              db 0x00 ;y
-	              db 0x00 ;z
-		times ASCII_max - ASCII_z db 0x00
+jump_table: 
+		times 'b' 		dq 0x00
+						dq int2_spec
+						dq char_spec
+						dq int10_spec
+		times 'o' - 'd' - 1 	dq 0x00
+						dq int8_spec
+		times 's' - 'o' - 1	dq 0x00
+						dq string_spec
+		times 'x' - 's' - 1	dq 0x00
+						dq int16_spec
+		times 0x100 - 'x' dq 0x00
 section .text
 ;===============================================================
 ; model: stdcall
@@ -275,12 +289,7 @@ itoa:
 	mov rcx, qword [rbp + 32]
 	mov rbx, alphabet
 	
-	mov rsi, rdi 				; save rdi start value
-	mov rdx, rcx				; checking rcx = 2^n
-	dec rdx
-	and rdx, rcx
-	jz base_is_pow2
-	
+	mov rsi, rdi	
 default_converting_to_string:
 	
 	xor rdx, rdx	
@@ -298,38 +307,6 @@ default_converting_to_string:
 	jne default_converting_to_string
 	
 	jmp init_reverse
-
-base_is_pow2:
-	mov rdx, rcx
-	xor rcx, rcx
-
-getting_pow:
-	
-	inc rcx
-	shr rdx, 1
-	cmp rdx, 0x01
-	jne getting_pow
-
-converting_pow2_to_string:
-	mov rdx, rax
-	shr rax, cl
-	shl rax, cl
-
-
-	sub rdx, rax
-	shr rax, cl
-
-	push rax
-	mov rax, rbx
-	add rax, rdx
-
-	mov al, byte [rax]
-	stosb
-	pop rax
-
-	cmp rax, 0x00
-
-	jne converting_pow2_to_string
 
 init_reverse:
 	
@@ -355,8 +332,8 @@ reversing:
 	dec rdi
 	loop reversing
 
-after_reverse:
 	pop rdi
+after_reverse:
 	
 	pop rcx	
 	pop rsi
