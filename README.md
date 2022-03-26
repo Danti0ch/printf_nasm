@@ -1,2 +1,2 @@
 # nasm_printf
-simple nasm function, that prints a string converted taking into account the specifiers
+My own realisation of printf on nasm
