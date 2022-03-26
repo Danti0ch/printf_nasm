@@ -11,7 +11,10 @@ extern "C" int prinft(const char* str, ...);
 #include <stdio.h>
 
 int main(){
-	prinft("%d %d %d %d %d %d %d %d %d %d %d", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+	prinft("%d %d %d %d %d %d %d %d %d %d %d\n"
+	       "I %s %x %d%%%c%b",
+		 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+		"LOVE", 3802, 100, 33, 15);
 	//prinft("%d, %d", 1, 2);
 	//sum(1, 2, 3, 4, 5, 6, 7, 8, 9);
 	return 0;
